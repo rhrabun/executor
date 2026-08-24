@@ -476,6 +476,8 @@ export type Executor<TPlugins extends readonly AnyPlugin[] = readonly []> = {
 
   readonly providers: {
     readonly list: () => Effect.Effect<readonly ProviderKey[]>;
+    /** The default writable provider (first registered), or null when none. */
+    readonly default: () => Effect.Effect<ProviderKey | null>;
     readonly items: (key: ProviderKey) => Effect.Effect<readonly ProviderEntry[], StorageFailure>;
   };
 
@@ -5984,6 +5986,9 @@ export const createExecutor = <const TPlugins extends readonly AnyPlugin[] = rea
     const providersList = (): Effect.Effect<readonly ProviderKey[]> =>
       Effect.sync(() => credentialProviderOrder.map((key) => ProviderKey.make(key)));
 
+    const providersDefault = (): Effect.Effect<ProviderKey | null> =>
+      Effect.sync(() => defaultWritableProvider()?.key ?? null);
+
     const providersItems = (
       key: ProviderKey,
     ): Effect.Effect<readonly ProviderEntry[], StorageFailure> =>
@@ -7304,6 +7309,7 @@ export const createExecutor = <const TPlugins extends readonly AnyPlugin[] = rea
       },
       providers: {
         list: providersList,
+        default: providersDefault,
         items: providersItems,
       },
       policies: {

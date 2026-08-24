@@ -1,10 +1,11 @@
 import { Suspense } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Option from "effect/Option";
 import type { ProviderKey } from "@executor-js/sdk/shared";
 import { useSecretProviderPlugins } from "@executor-js/sdk/client";
 
-import { providersAtom } from "../api/atoms";
+import { providersAtom, defaultProviderAtom } from "../api/atoms";
 import {
   CardStack,
   CardStackContent,
@@ -55,6 +56,11 @@ export function SecretsPage(props: { showProviderInfo?: boolean }) {
   const secretProviderPlugins = useSecretProviderPlugins();
   const providers = useAtomValue(providersAtom);
   const refreshProviders = useAtomRefresh(providersAtom);
+  const defaultProvider = useAtomValue(defaultProviderAtom);
+  const defaultKey = Option.getOrElse(
+    AsyncResult.value(defaultProvider),
+    (): ProviderKey | null => null,
+  );
 
   return (
     <PageContainer>
@@ -132,7 +138,9 @@ export function SecretsPage(props: { showProviderInfo?: boolean }) {
                       </CardStackEntryContent>
                       <CardStackEntryActions>
                         <Badge variant="secondary">
-                          {String(key) === "encrypted" ? "default" : "provider"}
+                          {defaultKey !== null && String(defaultKey) === String(key)
+                            ? "default"
+                            : "provider"}
                         </Badge>
                       </CardStackEntryActions>
                     </CardStackEntry>

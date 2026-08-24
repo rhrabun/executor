@@ -29,27 +29,58 @@ interface LocalPluginDeps {
   readonly activeToolkitSlug?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Secret provider selection — fork patch, not upstreamed.
+//
+// EXECUTOR_SECRET_PROVIDER chooses where credential values live:
+//   - "auto" (default): keychain registers FIRST so it becomes the default
+//     store for minted OAuth tokens and pasted values. The keychain plugin
+//     self-probes (sentinel write+delete) and registers nothing when the OS
+//     keyring is unreachable, so the durable file store becomes first
+//     writable = default (see executor.ts defaultWritableProvider).
+//   - "file": upstream order — file first, keychain still registered for
+//     explicit external refs.
+//   - "keychain": strict mode — the file store is omitted entirely, so an
+//     unavailable keyring fails loudly instead of silently falling back to
+//     plaintext on disk.
+//
+// Upstream keeps file first because sandbox/headless hosts can expose an
+// in-memory keyring that passes the probe but wipes tokens across restarts
+// (PR #1478). This fork prefers the OS keychain on persistent machines; auto
+// mode cannot distinguish a persistent from an ephemeral keyring.
+// ---------------------------------------------------------------------------
+
+type SecretProviderMode = "auto" | "keychain" | "file";
+
+const secretProviderMode = (): SecretProviderMode => {
+  const raw = process.env.EXECUTOR_SECRET_PROVIDER?.trim().toLowerCase();
+  if (raw === "file" || raw === "keychain") return raw;
+  return "auto";
+};
+
+// Registration order decides the default store: the first writable credential
+// provider wins for minted OAuth tokens and pasted values.
+const secretStorePlugins = (mode: SecretProviderMode) =>
+  mode === "file"
+    ? [fileSecretsPlugin(), keychainPlugin()]
+    : mode === "keychain"
+      ? [keychainPlugin()]
+      : [keychainPlugin(), fileSecretsPlugin()];
+
 export default defineExecutorConfig({
-  plugins: ({ activeToolkitSlug }: LocalPluginDeps = {}) =>
-    [
-      openApiHttpPlugin({
-        presets: [...googleCatalog, ...microsoftCatalog],
-        specFormats: [googleDiscoveryAdapter, microsoftGraphAdapter],
-      }),
-      mcpHttpPlugin({ dangerouslyAllowStdioMCP: true }),
-      graphqlHttpPlugin(),
-      toolkitsPlugin({ activeToolkitSlug }),
-      // The durable file store must register before keychain: the first
-      // writable provider becomes the default for minted OAuth tokens, and on
-      // sandbox/headless hosts the keychain is an in-memory keyring that a
-      // stop/recreate wipes while only EXECUTOR_DATA_DIR is persisted.
-      // Keychain stays registered for explicit external refs.
-      fileSecretsPlugin(),
-      keychainPlugin(),
-      onepasswordHttpPlugin(),
-      desktopSettingsPlugin({
-        webBaseUrl:
-          process.env.EXECUTOR_WEB_BASE_URL ?? `http://localhost:${process.env.PORT ?? "4788"}`,
-      }),
-    ] as const,
+  plugins: ({ activeToolkitSlug }: LocalPluginDeps = {}) => [
+    openApiHttpPlugin({
+      presets: [...googleCatalog, ...microsoftCatalog],
+      specFormats: [googleDiscoveryAdapter, microsoftGraphAdapter],
+    }),
+    mcpHttpPlugin({ dangerouslyAllowStdioMCP: true }),
+    graphqlHttpPlugin(),
+    toolkitsPlugin({ activeToolkitSlug }),
+    ...secretStorePlugins(secretProviderMode()),
+    onepasswordHttpPlugin(),
+    desktopSettingsPlugin({
+      webBaseUrl:
+        process.env.EXECUTOR_WEB_BASE_URL ?? `http://localhost:${process.env.PORT ?? "4788"}`,
+    }),
+  ],
 });

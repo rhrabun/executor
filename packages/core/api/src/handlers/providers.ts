@@ -16,6 +16,14 @@ export const ProvidersHandlers = HttpApiBuilder.group(ExecutorApi, "providers", 
         }),
       ),
     )
+    .handle("default", () =>
+      capture(
+        Effect.gen(function* () {
+          const executor = yield* ExecutorService;
+          return yield* executor.providers.default();
+        }),
+      ),
+    )
     .handle("items", ({ params: path }) =>
       capture(
         Effect.gen(function* () {
