@@ -120,6 +120,28 @@ interface ViteChild {
 
 const viteChildSignals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
+// ---------------------------------------------------------------------------
+// Last-resort vite reaper, registered at module load.
+//
+// The CLI's Effect runMain installs its own SIGTERM/SIGINT handler that calls
+// `fiber.interruptUnsafe` from inside the signal dispatch. That call does not
+// return cleanly: listeners registered after it (the per-child reaper below,
+// the shutdown waiter) never fire, and the process exits without running the
+// dispose chain — orphaning the spawned vite child. Being registered FIRST
+// (imports evaluate before runMain), this handler runs before that breakage
+// and kills the child directly. `on`, not `once`: it must survive across
+// sequentially spawned children.
+// ---------------------------------------------------------------------------
+
+let liveViteChild: { kill(): void } | null = null;
+
+const reapLiveViteChild = (): void => {
+  liveViteChild?.kill();
+  liveViteChild = null;
+};
+
+for (const signal of viteChildSignals) process.on(signal, reapLiveViteChild);
+
 async function allocatePort(): Promise<number> {
   const probe = Bun.serve({
     port: 0,
@@ -172,6 +194,7 @@ async function startViteChild(): Promise<ViteChild> {
       return;
     }
     stopping = true;
+    if (liveViteChild === child) liveViteChild = null;
     for (const signal of viteChildSignals) process.off(signal, stopOnParentSignal);
     if (child.exitCode === null) child.kill();
     await Promise.race([child.exited, Bun.sleep(5_000)]);
@@ -186,6 +209,7 @@ async function startViteChild(): Promise<ViteChild> {
     void stop();
   };
   for (const signal of viteChildSignals) process.once(signal, stopOnParentSignal);
+  liveViteChild = child;
 
   const url = `http://127.0.0.1:${vitePort}`;
   const deadline = Date.now() + 30_000;
