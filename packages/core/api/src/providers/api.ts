@@ -41,6 +41,12 @@ export const ProvidersApi = HttpApiGroup.make("providers")
     }),
   )
   .add(
+    HttpApiEndpoint.get("default", "/providers/default", {
+      success: Schema.NullOr(ProviderKey),
+      error: InternalError,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("items", "/providers/:key/items", {
       params: ProviderParams,
       success: Schema.Array(ProviderEntryResponse),

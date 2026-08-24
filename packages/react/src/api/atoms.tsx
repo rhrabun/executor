@@ -129,6 +129,11 @@ export const providersAtom = ExecutorApiClient.query("providers", "list", {
   reactivityKeys: [ReactivityKey.providers],
 });
 
+export const defaultProviderAtom = ExecutorApiClient.query("providers", "default", {
+  timeToLive: "5 minutes",
+  reactivityKeys: [ReactivityKey.providers],
+});
+
 export const providerItemsAtom = (key: ProviderKey) =>
   ExecutorApiClient.query("providers", "items", {
     params: { key },
