@@ -1,10 +1,7 @@
 name: Release
 run-name: prepare release
 
-on:
-  push:
-    branches:
-      - main
+on: workflow_dispatch
 
 permissions:
   contents: read

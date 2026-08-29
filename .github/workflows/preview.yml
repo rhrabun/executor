@@ -11,9 +11,7 @@ name: Preview
 #   var    PREVIEW_ACCESS_TEAM_DOMAIN    — Zero Trust team domain
 #   var    PREVIEW_ACCESS_EMAILS         — comma-separated emails allowed through Access
 
-on:
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
+on: workflow_dispatch
 
 permissions:
   contents: read

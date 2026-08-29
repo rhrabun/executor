@@ -7,10 +7,7 @@ name: Preview sweep
 # account: crashed suite runs leak executor-e2e-* stacks, and synthetic OTP
 # logins permanently occupy Zero Trust seats.
 
-on:
-  schedule:
-    - cron: "23 5 * * *"
-  workflow_dispatch:
+on: workflow_dispatch
 
 permissions:
   contents: read
