@@ -2,18 +2,28 @@
 # Build context is the repo root because Bun workspaces need every member:
 #   docker build -f apps/host-selfhost/Dockerfile -t executor-selfhost .
 #
+# Multi-arch works out of the box (`docker buildx build --platform linux/amd64,linux/arm64`):
+# package-runtime.ts resolves the libSQL/workerd natives from the emulated
+# target arch, so don't pin --platform=$BUILDPLATFORM here.
+#
 # Runtime needs this container plus a volume for the data dir:
 #   docker run -p 4788:4788 -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \
 #     -e EXECUTOR_BOOTSTRAP_ADMIN_EMAIL=you@example.com \
 #     -e EXECUTOR_BOOTSTRAP_ADMIN_PASSWORD=... \
 #     -e EXECUTOR_WEB_BASE_URL=https://your.domain \
 #     -v executor-data:/data executor-selfhost
+#
+# Runs as the distroless `nonroot` user (uid/gid 65532). Named volumes inherit
+# /data's ownership automatically; for host bind mounts run
+# `chown 65532:65532 <host-dir>` first.
 
 FROM oven/bun:1 AS prod-deps
 WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile --production --ignore-scripts --filter @executor-js/host-selfhost \
-  && bun run apps/host-selfhost/scripts/package-runtime.ts
+  && bun run apps/host-selfhost/scripts/package-runtime.ts \
+# Pre-own the data dir so the named volume inherits nonroot ownership.
+  && mkdir -p /data && chown 65532:65532 /data
 
 FROM oven/bun:1 AS build
 WORKDIR /app
@@ -33,9 +43,11 @@ ENV NODE_ENV=production \
 COPY --from=prod-deps /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=prod-deps /app/.selfhost-runtime /app
 COPY --from=build /app/apps/host-selfhost/dist /app/apps/host-selfhost/dist
+COPY --from=prod-deps /data /data
 WORKDIR /app/apps/host-selfhost
+USER nonroot:nonroot
 VOLUME ["/data"]
 EXPOSE 4788
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD ["bun", "-e", "fetch('http://127.0.0.1:4788/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+  CMD ["bun", "-e", "fetch(`http://127.0.0.1:${process.env.PORT ?? 4788}/api/health`).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["bun", "run", "dist-server/serve.js"]

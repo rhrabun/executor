@@ -8,3 +8,18 @@
 **/.next
 **/*.log
 .claude
+
+# Local tooling, docs, and artifacts — never needed inside the image.
+.github
+.githooks
+.vscode
+.agents
+.skills
+.codex
+.astro
+.local
+plans
+tests
+e2e/runs
+e2e/.dev
+assets
