@@ -2,12 +2,20 @@
 # Build context is the repo root because Bun workspaces need every member:
 #   docker build -f apps/host-selfhost/Dockerfile -t executor-selfhost .
 #
+# Multi-arch works out of the box (`docker buildx build --platform linux/amd64,linux/arm64`):
+# package-runtime.ts resolves the libSQL/workerd natives from the emulated
+# target arch, so don't pin --platform=$BUILDPLATFORM here.
+#
 # Runtime needs this container plus a volume for the data dir:
 #   docker run -p 4788:4788 -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \
 #     -e EXECUTOR_BOOTSTRAP_ADMIN_EMAIL=you@example.com \
 #     -e EXECUTOR_BOOTSTRAP_ADMIN_PASSWORD=... \
 #     -e EXECUTOR_WEB_BASE_URL=https://your.domain \
 #     -v executor-data:/data executor-selfhost
+#
+# Runs as the distroless `nonroot` user (uid/gid 65532). Named volumes inherit
+# /data's ownership automatically; for host bind mounts run
+# `chown 65532:65532 <host-dir>` first.
 
 FROM oven/bun:1.3.11@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7 AS prod-deps
 WORKDIR /app
@@ -43,5 +51,5 @@ USER 65532:65532
 VOLUME ["/data"]
 EXPOSE 4788
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD ["bun", "-e", "fetch('http://127.0.0.1:4788/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+  CMD ["bun", "-e", "fetch(`http://127.0.0.1:${process.env.PORT ?? 4788}/api/health`).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["bun", "run", "dist-server/serve.js"]
